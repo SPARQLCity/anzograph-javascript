@@ -1,0 +1,35 @@
+<!-- Copyright(c) 2017 Cambridge Semantics Inc. All rights reserved. -->
+<!DOCTYPE html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html;charset=utf-8">
+  <meta charset="UTF-8"/>
+  <title>AnzoGraph: JS DataFrame</title>
+  <style>
+    body {font-family:serif; font-size:10pt;}
+    h3 {font-family:sans-serif; font-size:12pt; font-weight:bold; }
+  </style>
+  <script type="text/javascript" src="https://gmousse.github.io/dataframe-js/dist/dataframe.min.js"></script>
+  <script type="text/javascript" src="azg.js"></script>
+  <script>
+    function run_query() {
+      let qt = document.getElementById('querytext');
+      let ra = document.getElementById('resultsarea');
+      // create js dataframe object
+      // and display first 100 rows if successful
+      azg.create_dataframe(qt.value).then((df)=> {
+        ra.innerHTML = df.show(100);  // show first 100 rows
+      }).catch((err) => {
+        ra.innerHTML = err;
+      });
+    }
+  </script>
+</head>
+<body>
+  <h3 id="h3">AnzoGraph: dfjs.DataFrame</h3>
+  <div>
+    <textarea id="querytext" rows="10" cols="80"></textarea><br/>
+    <button id="runquery" onclick="run_query();">Run</button>
+  </div>
+  <div> <pre id="resultsarea"></pre></div>
+</body>
+</html>
