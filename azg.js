@@ -23,10 +23,7 @@ azg.run_query = (qrystr)=> {
     // response handler - return results when response comes back
     xh.onreadystatechange = ()=> {
       if (4 === xh.readyState) {  // response arrived completely
-        if (400 === xh.status) {  // Bad Request - parse errors, etc.
-          reject(xh.response);
-        }
-        else if (200 === xh.status) {  // HTTP OK
+        if (200 === xh.status) {  // HTTP OK
           let ct = xh.getResponseHeader('content-type');
           if (!isvalid(ct)) ct = 'text/plain';
           if (ct.includes('application/sparql-results+json') || ct.includes('json')) {
@@ -38,6 +35,9 @@ azg.run_query = (qrystr)=> {
             }
           }
         }
+        else { // Not OK, ==> Bad Request(parse errors, etc). or Auth failures etc.
+          reject(xh.response);
+        }
       }
     };
     // if error occured, display the error
@@ -45,6 +45,45 @@ azg.run_query = (qrystr)=> {
       reject('Error Status: '+e.target.status + ': ' + xh.status + ' - ' + e.error);
     };
   });
+};
+
+// create dataframe object from JSON dict of SPARQL results
+// may throw error if 'resp' is not in the right object
+azg.create_dataframe_from_response = (resp)=> {
+  // covert row-wise data to columnar data
+  const cols = resp.head.vars;
+  let coldata = {};
+  cols.forEach((col)=> {
+    coldata[col] = [];
+  });
+  const isvalid = (o)=> { return (undefined !== o && null !== o); };
+  resp.results.bindings.forEach((row)=> {
+    cols.forEach((col)=> {
+      const cell = row[col];
+      let val = null;
+      try {
+        // create a proper instance of datum
+        val = cell.value;
+        let vtype = cell.type;
+        let typeuri = cell.datatype;
+        const langtag = cell['xml:lang'];
+        if (isvalid(vtype) && vtype == 'bnode') {
+          val = '_:'+val;
+        }
+        else if (isvalid(langtag)) {
+          val = '"'+val+'"'+'@'+langtag;
+        }
+        else if (isvalid(typeuri)) {
+          typeuri = typeuri.replace('http://www.w3.org/2001/XMLSchema#','');
+          val = azg.typed_value(typeuri,val);
+        }
+      }
+      catch (e) {}  // unbound datum
+      coldata[col].push(val);
+    });
+  });
+  // create dfjs.DataFrame instance
+  return new dfjs.DataFrame(coldata,cols);
 };
 
 // Returns a Promise to create a dfjs.DataFrame
@@ -55,40 +94,9 @@ azg.create_dataframe = (qrystr)=> {
     // run query
     azg.run_query(qrystr).then((r)=> {
       try {
-        // covert row-wise data to columnar data
-        const cols = r.head.vars;
-        let coldata = {};
-        cols.forEach((col)=> {
-          coldata[col] = [];
-        });
-        const isvalid = (o)=> { return (undefined !== o && null !== o); };
-        r.results.bindings.forEach((row)=> {
-          cols.forEach((col)=> {
-            const cell = row[col];
-            let val = null;
-            try {
-              // create a proper instance of datum
-              val = cell.value;
-              let vtype = cell.type;
-              let typeuri = cell.datatype;
-              const langtag = cell['xml:lang'];
-              if (isvalid(vtype) && vtype == 'bnode') {
-                val = '_:'+val;
-              }
-              else if (isvalid(langtag)) {
-                val = '"'+val+'"'+'@'+langtag;
-              }
-              else if (isvalid(typeuri)) {
-                typeuri = typeuri.replace('http://www.w3.org/2001/XMLSchema#','');
-                val = azg.typed_value(typeuri,val);
-              }
-            }
-            catch (e) {}  // unbound datum
-            coldata[col].push(val);
-          });
-        });
+        let df = azg.create_dataframe_from_response(r);
         // create dfjs.DataFrame instance
-        resolve(new dfjs.DataFrame(coldata,cols));
+        resolve(df);
       } catch(e) { reject(e); };
     }).catch((e)=> { reject(e); });
   });
